@@ -29,6 +29,15 @@ import tokenization
 import six
 import tensorflow as tf
 
+# uuid (willy add in 20190312)
+import uuid
+
+# do 
+import code
+import prettytable
+from drqa import retriever
+
+
 flags = tf.flags
 
 FLAGS = flags.FLAGS
@@ -65,7 +74,7 @@ flags.DEFINE_bool(
 
 flags.DEFINE_integer(
     "max_seq_length", 384,
-    "The maximum total input sequence length after WordPiece tokenization. "
+    "The maximum total input sequence length after WordPido_interactiveece tokenization. "
     "Sequences longer than this will be truncated, and sequences shorter "
     "than this will be padded.")
 
@@ -153,6 +162,33 @@ flags.DEFINE_float(
     "null_score_diff_threshold", 0.0,
     "If null_score - best_non_null is greater than the threshold predict null.")
 
+flags.DEFINE_bool(
+    "do_retriever", False,
+    "If True, use retriever to help reader to filte good doc - add by willy.")
+
+flags.DEFINE_string(
+    "retriever_model", None,
+    "retriever model path - add by willy.")
+
+
+flags.DEFINE_integer("retriever_ranker", 0,"Rank with retriever.")
+
+
+flags.DEFINE_string("document_type","SQuAD", "There are three document types: (1)paragraphs in SQuAD (2)SQlite (DataBase) (3) Text - add by willy." )
+
+
+flags.DEFINE_string(
+    "question_type","SQuAD",
+    "There are three question types: (1) SQuAD (2)one_question (3) interactive." )
+
+flags.DEFINE_string(
+    "question", None,
+    "give question to predict - Willy Test.")
+
+flags.DEFINE_string(
+    "db_file", None,
+    "give path with data base file to set SQlite State - Willy Test.")
+
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
@@ -223,7 +259,85 @@ class InputFeatures(object):
     self.end_position = end_position
     self.is_impossible = is_impossible
 
+def set_squad_examples(input_file,question):
 
+    """Read a SQuAD json file into a list of SquadExample."""
+    with tf.gfile.Open(input_file, "r") as reader:
+        input_data = json.load(reader)["data"]
+    def is_whitespace(c):
+        if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
+            return True
+        return False
+        
+    examples = []
+    file = open("Output1.txt", "r")
+    document = file.read()
+    file.close()
+    paragraphs = document.split('\n')
+    paragraphs = list(filter(None, paragraphs))
+    #-----------------------------------------------
+    doc_tokensList = []
+    for i , paragraph_text in enumerate(paragraphs):
+        # paragraph_text = paragraph["context"]
+        doc_tokens = []
+        char_to_word_offset = []
+        prev_is_whitespace = True
+        for c in paragraph_text:
+            if is_whitespace(c):
+                prev_is_whitespace = True
+            else:
+                if prev_is_whitespace:
+                    doc_tokens.append(c)
+                else:
+                    doc_tokens[-1] += c
+                prev_is_whitespace = False
+            char_to_word_offset.append(len(doc_tokens) - 1)
+        doc_tokensList.append(doc_tokens)
+    #-----------------------------------------------
+    start_position = -1
+    end_position = -1
+    orig_answer_text = ""
+    is_impossible = False
+    for doc_tokens in doc_tokensList:
+        example = SquadExample(
+            qas_id=str(uuid.uuid1()),
+            question_text=question,
+            doc_tokens=doc_tokens,
+            orig_answer_text=orig_answer_text,
+            start_position=start_position,
+            end_position=end_position,
+            is_impossible=is_impossible)
+        examples.append(example)
+    
+    '''    
+    for entry in input_data:
+        for paragraph in entry["paragraphs"]:
+            for qa in paragraph["qas"]:
+                #qas_id = qa["id"]
+                # uuid reset by willy in 20190313
+                qas_id = str(uuid.uuid1())
+                question_text = qa["question"]
+                start_position = -1
+                end_position = -1
+                orig_answer_text = ""
+                is_impossible = False
+
+                for doc_tokens in doc_tokensList:
+                    example = SquadExample(
+                        qas_id=qas_id,
+                        question_text=question_text,
+                        doc_tokens=doc_tokens,
+                        orig_answer_text=orig_answer_text,
+                        start_position=start_position,
+                        end_position=end_position,
+                        is_impossible=is_impossible)
+
+                    print(example)
+                    examples.append(example)
+    '''         
+    #-----------------------------------------------
+    return examples        
+    
 def read_squad_examples(input_file, is_training):
   """Read a SQuAD json file into a list of SquadExample."""
   with tf.gfile.Open(input_file, "r") as reader:
@@ -304,7 +418,6 @@ def read_squad_examples(input_file, is_training):
         examples.append(example)
 
   return examples
-
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length,
                                  doc_stride, max_query_length, is_training,
@@ -724,7 +837,7 @@ def input_fn_builder(input_file, seq_length, is_training, drop_remainder):
       d = d.shuffle(buffer_size=100)
 
     d = d.apply(
-        tf.contrib.data.map_and_batch(
+        tf.data.experimental.map_and_batch(
             lambda record: _decode_record(record, name_to_features),
             batch_size=batch_size,
             drop_remainder=drop_remainder))
@@ -760,7 +873,8 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
   all_predictions = collections.OrderedDict()
   all_nbest_json = collections.OrderedDict()
   scores_diff_json = collections.OrderedDict()
-
+  OutAns=""
+  Outpredict=0.0
   for (example_index, example) in enumerate(all_examples):
     features = example_index_to_features[example_index]
 
@@ -886,6 +1000,7 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         if entry.text:
           best_non_null_entry = entry
 
+   #參考
     probs = _compute_softmax(total_scores)
 
     nbest_json = []
@@ -896,6 +1011,9 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
       output["start_logit"] = entry.start_logit
       output["end_logit"] = entry.end_logit
       nbest_json.append(output)
+      if probs[i] > Outpredict:
+        OutAns=entry.text
+        Outpredict = probs[i]
 
     assert len(nbest_json) >= 1
 
@@ -912,6 +1030,10 @@ def write_predictions(all_examples, all_features, all_results, n_best_size,
         all_predictions[example.qas_id] = best_non_null_entry.text
 
     all_nbest_json[example.qas_id] = nbest_json
+  
+
+  print ('The Output answer is %s' %(OutAns))
+  print ('The Output prob is %f' %(Outpredict))
 
   with tf.gfile.GFile(output_prediction_file, "w") as writer:
     writer.write(json.dumps(all_predictions, indent=4) + "\n")
@@ -1121,11 +1243,142 @@ def validate_flags_or_throw(bert_config):
     raise ValueError(
         "The max_seq_length (%d) must be greater than max_query_length "
         "(%d) + 3" % (FLAGS.max_seq_length, FLAGS.max_query_length))
+  
+  # Retriever - added by Willy 
+  if FLAGS.do_retriever:
+    if not FLAGS.retriever_model:
+        raise ValueError("You have to set retriever model(give the path) when you set do_retriever to Yes.")
+    if FLAGS.document_type != 'Sqlite' or FLAGS.db_file == None :
+        raise ValueError("You have to set document_type to Sqlit and set the db_file when you set do_retriever to Yes.")
+  
+  # TODO : think a mechanism to chek these key word
+  '''
+  if FLAGS.document_type is 'SQlite':
+    # TODO: set database
+  elif FLAGS.document_type is 'Text':
+    # TODO: set text file
+  elif FLAGS.document_type is 'SQuAD':
+    # is original method
+  else :
+    raise ValueError(
+        "You have to set correct document_type: (1)'SQlite' (2)'Text' (3)SQuAD.")
+'''
 
+def read_squad_documents(input_file):
+    """Read a SQuAD json file into a list of SquadExample."""
+    with tf.gfile.Open(input_file, "r") as reader:
+        input_data = json.load(reader)["data"]  
+    documents = []
+    for entry in input_data:
+        for paragraph in entry["paragraphs"]:
+            documents.append(paragraph["context"])
+            
+    return documents
+
+
+def read_sqlite_documents(input_file):
+    # TODO
+    DOC2IDX = None
+    documents = []
+    db_class = retriever.get_class('sqlite')
+    with db_class(input_file) as doc_db:
+        doc_ids = doc_db.get_doc_ids()
+        for ids in doc_ids:
+            documents.append(doc_db.get_doc_text(ids))
+    DOC2IDX = {doc_id: i for i, doc_id in enumerate(doc_ids)}
+    return DOC2IDX, documents
+    '''
+    global DOC2IDX
+    db_class = retriever.get_class(db)
+    with db_class(**db_opts) as doc_db:
+        doc_ids = doc_db.get_doc_ids()
+    DOC2IDX = {doc_id: i for i, doc_id in enumerate(doc_ids)}
+    
+    return DOC2IDX
+    '''
+
+
+def read_text_documents(input_file):
+    examples = []
+    file = open(input_file, "r")
+    documents = file.read()
+    file.close()
+    documents_split = documents.split('\n')
+    documents_final = list(filter(None, documents))
+    return documents_final
+
+def read_squad_question(input_file):
+    questions = []
+    """Read a SQuAD json file into a list of SquadExample."""
+    with tf.gfile.Open(input_file, "r") as reader:    
+        input_data = json.load(reader)["data"]  
+        for entry in input_data:
+            for paragraph in entry["paragraphs"]:
+                for qa in paragraph["qas"]:
+                    questions.append(qa["question"])
+    return questions
+
+def set_eval_examples(questions,documents):
+    def is_whitespace(c):
+        if c == " " or c == "\t" or c == "\r" or c == "\n" or ord(c) == 0x202F:
+            return True
+        return False
+
+    eval_examples = []
+    '''
+    for i, document in enumerate(documents):
+        print(i)
+        print (document)        
+    '''
+    
+    for question in questions:
+    #-------------------------questions - Start---------------------------#        
+        question_text = question
+        start_position = -1
+        end_position = -1
+        orig_answer_text = ""
+        is_impossible = False
+
+        #-------------documents - Start--------------#
+        for i , paragraph_text in enumerate(documents):
+        #-------paragraphs - Start-------#
+            doc_tokens = []
+            char_to_word_offset = []
+            prev_is_whitespace = True
+            for c in paragraph_text:
+                if is_whitespace(c):
+                    prev_is_whitespace = True
+                else:
+                    if prev_is_whitespace:
+                        doc_tokens.append(c)
+                    else:
+                        doc_tokens[-1] += c
+                    prev_is_whitespace = False
+                char_to_word_offset.append(len(doc_tokens) - 1)
+                
+            #-------paragraphs - End-------#
+            qas_id = str(uuid.uuid1())
+            example = SquadExample(
+                    qas_id=qas_id,
+                    question_text=question_text,
+                    doc_tokens=doc_tokens,
+                    orig_answer_text=orig_answer_text,
+                    start_position=start_position,
+                    end_position=end_position,
+                    is_impossible=is_impossible)
+            eval_examples.append(example)
+        #-------------documents - Start--------------#
+    #-------------------------questions - End-----------------------------#
+
+    for i, example in enumerate(eval_examples):
+        print(i)
+        print (example)
+    
+    return eval_examples
 
 def main(_):
   tf.logging.set_verbosity(tf.logging.INFO)
-
+  
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
   validate_flags_or_throw(bert_config)
@@ -1154,6 +1407,12 @@ def main(_):
   train_examples = None
   num_train_steps = None
   num_warmup_steps = None
+  
+  ranker = None   
+    
+
+
+  #------------------------do train(Start-(1))----------------------------#
   if FLAGS.do_train:
     train_examples = read_squad_examples(
         input_file=FLAGS.train_file, is_training=True)
@@ -1165,6 +1424,7 @@ def main(_):
     # buffer in in the `input_fn`.
     rng = random.Random(12345)
     rng.shuffle(train_examples)
+  #--------------------------do train(End-(1))----------------------------#
 
   model_fn = model_fn_builder(
       bert_config=bert_config,
@@ -1214,19 +1474,112 @@ def main(_):
         drop_remainder=True)
     estimator.train(input_fn=train_input_fn, max_steps=num_train_steps)
 
-  if FLAGS.do_predict:
-    eval_examples = read_squad_examples(
-        input_file=FLAGS.predict_file, is_training=False)
+  if FLAGS.do_predict:  
+    
+    questions = []
+    print('WillyTest(1)...do Set question:%s' %(FLAGS.question_type))
+    #---------------------set question , changed by willy---------------------# 
+    '''
+    if FLAGS.question_type is 'SQuAD':
+        questions = read_squad_question(input_file=FLAGS.predict_file)
+    elif FLAGS.question_type is 'one_question':
+        questions.append(FLAGS.question)
+    elif FLAGS.question_type is 'interactive':
+        #TODO : interactive mode
+        questions.append(FLAGS.question)
+    '''
+    questions.append(FLAGS.question)
+    #-------------------------------------------------------------------------#
+    
+    
+    docments = []
+    DOC2IDX = None    
+    #--------------------set document , changed by willy--------------------# 
+    if FLAGS.do_retriever:
+        # Set TF-IDF        
+        #------------------------------------------------------
+        ranker = retriever.get_class('tfidf')(tfidf_path=FLAGS.retriever_model)
+        print('WillyTest...len of questions:%d' %(len(questions)))
+        if len(questions) == 1:
+            ranked = [ranker.closest_docs(questions[0], k=3)]
+        else:
+            ranked = ranker.batch_closest_docs(
+                questions, k=3, num_workers=self.num_workers
+            )
+        
+        '''
+        all_docids, all_doc_scores = zip(*ranked)
+        flat_docids = list({d for docids in all_docids for d in docids})
+        did2didx = {did: didx for didx, did in enumerate(flat_docids)}
+        doc_texts = self.processes.map(fetch_text, flat_docids)
+        '''
+        #------------------------------------------------------
+        
+        # Set Document
+        #------------------------------------------------------
+        print('WillyTest...do SQlite')
+        DOC2IDX, docments = read_sqlite_documents(input_file=FLAGS.db_file)
+        
+        
+        #------------------------------------------------------
+        
+    else:
+        # Set Document
+        tf.logging.info("my document_type is %s",FLAGS.document_type)
+        if FLAGS.document_type is 'Text':
+            #TODO
+            print('WillyTest...do Text')
+            docments = read_text_documents(input_file=FLAGS.predict_file)
+        
+        elif FLAGS.document_type is 'SQuAD':
+            #TODO
+            print('WillyTest...do SQuAD')
+            docments = read_squad_documents(input_file=FLAGS.predict_file)
+        else:
+            raise ValueError("Your document_type: %s is undefined or wrong, please reset it." %(FLAGS.document_type)) 
 
+        #-------------------------------------------------------------------------#
+        
+    # define
+    #---------------------------------------------------
+    def append_feature(feature):
+        eval_features.append(feature)
+        eval_writer.process_feature(feature)
+    # ---------------------------------------------------     
+    print('WillyTest(2)...do Set eval_examples')
+    eval_examples=set_eval_examples(questions,docments)
+
+    print('WillyTest(2.1)...do FeatureWriter')
     eval_writer = FeatureWriter(
         filename=os.path.join(FLAGS.output_dir, "eval.tf_record"),
         is_training=False)
     eval_features = []
 
-    def append_feature(feature):
-      eval_features.append(feature)
-      eval_writer.process_feature(feature)
+    print('WillyTest(2.2)...do convert_examples_to_features')
+    convert_examples_to_features(
+        examples=eval_examples,
+        tokenizer=tokenizer,
+        max_seq_length=FLAGS.max_seq_length,
+        doc_stride=FLAGS.doc_stride,
+        max_query_length=FLAGS.max_query_length,
+        is_training=False,
+        output_fn=append_feature)
+    eval_writer.close()    
+    
+    
+    
+    '''
+    eval_examples = read_squad_examples(
+        input_file=FLAGS.predict_file, is_training=False)
+    
+    
+    print('WillyTest(3)...do FeatureWriter')
+    eval_writer = FeatureWriter(
+        filename=os.path.join(FLAGS.output_dir, "eval.tf_record"),
+        is_training=False)
+    eval_features = []
 
+    print('WillyTest(4)...do convert_examples_to_features')
     convert_examples_to_features(
         examples=eval_examples,
         tokenizer=tokenizer,
@@ -1236,14 +1589,15 @@ def main(_):
         is_training=False,
         output_fn=append_feature)
     eval_writer.close()
+    '''
 
     tf.logging.info("***** Running predictions *****")
     tf.logging.info("  Num orig examples = %d", len(eval_examples))
     tf.logging.info("  Num split examples = %d", len(eval_features))
     tf.logging.info("  Batch size = %d", FLAGS.predict_batch_size)
 
-    all_results = []
 
+    print('WillyTest(5)...before redict_input_fn = input_fn_builder: eval_writer.filename=%s, FLAGS.max_seq_length=%d' %(eval_writer.filename,FLAGS.max_seq_length))
     predict_input_fn = input_fn_builder(
         input_file=eval_writer.filename,
         seq_length=FLAGS.max_seq_length,
@@ -1253,27 +1607,29 @@ def main(_):
     # If running eval on the TPU, you will need to specify the number of
     # steps.
     all_results = []
-    for result in estimator.predict(
-        predict_input_fn, yield_single_examples=True):
-      if len(all_results) % 1000 == 0:
-        tf.logging.info("Processing example: %d" % (len(all_results)))
-      unique_id = int(result["unique_ids"])
-      start_logits = [float(x) for x in result["start_logits"].flat]
-      end_logits = [float(x) for x in result["end_logits"].flat]
-      all_results.append(
-          RawResult(
-              unique_id=unique_id,
-              start_logits=start_logits,
-              end_logits=end_logits))
+    print('WillyTest(6)...before estimator.predict')
+    for result in estimator.predict(predict_input_fn, yield_single_examples=True):
+        print('WillyTest(6-1)')
+        if len(all_results) % 1000 == 0:
+            tf.logging.info("Processing example: %d" % (len(all_results)))
+        print('WillyTest(6-2)')
+        unique_id = int(result["unique_ids"])
+        start_logits = [float(x) for x in result["start_logits"].flat]
+        end_logits = [float(x) for x in result["end_logits"].flat]
+        all_results.append(RawResult(unique_id=unique_id,start_logits=start_logits,end_logits=end_logits))
+        print('WillyTest(6-3)')
 
+    print('WillyTest(7)...before output_prediction_file')  
     output_prediction_file = os.path.join(FLAGS.output_dir, "predictions.json")
     output_nbest_file = os.path.join(FLAGS.output_dir, "nbest_predictions.json")
     output_null_log_odds_file = os.path.join(FLAGS.output_dir, "null_odds.json")
 
+    print('WillyTest(8)...before write_predictions')  
     write_predictions(eval_examples, eval_features, all_results,
                       FLAGS.n_best_size, FLAGS.max_answer_length,
                       FLAGS.do_lower_case, output_prediction_file,
                       output_nbest_file, output_null_log_odds_file)
+
 
 
 if __name__ == "__main__":
