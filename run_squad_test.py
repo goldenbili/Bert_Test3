@@ -351,7 +351,7 @@ def read_squad_examples(input_file, is_training):
   examples = []
   for entry in input_data:
     for paragraph in entry["paragraphs"]:
-      paragraph_text = paragraph["context"]
+      paragraph_text = paragraph["context"]      
       doc_tokens = []
       char_to_word_offset = []
       prev_is_whitespace = True
@@ -378,6 +378,7 @@ def read_squad_examples(input_file, is_training):
           if FLAGS.version_2_with_negative:
             is_impossible = qa["is_impossible"]
           if (len(qa["answers"]) != 1) and (not is_impossible):
+            print("WillyTest: %s" %(paragraph_text))
             print("WillyTest: %s" %(qa["answers"]))
             raise ValueError(
                 "For training, each question should have exactly 1 answer.")
