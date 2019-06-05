@@ -37,6 +37,9 @@ import code
 import prettytable
 from drqa import retriever
 
+willy_check_code = "willy test on 201906051926"
+
+
 
 flags = tf.flags
 
@@ -1379,6 +1382,7 @@ def set_eval_examples(questions,documents):
     return eval_examples
 
 def main(_):
+  print(willy_check_code)
   tf.logging.set_verbosity(tf.logging.INFO)
   
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
