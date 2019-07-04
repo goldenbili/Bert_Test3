@@ -381,8 +381,8 @@ def read_squad_examples(input_file, is_training):
           if FLAGS.version_2_with_negative:
             is_impossible = qa["is_impossible"]
           if (len(qa["answers"]) != 1) and (not is_impossible):
-            #print("WillyTest: %s" %(paragraph_text))
-            #print("WillyTest: %s" %(qa["answers"]))
+            print("WillyTest: %s" %(paragraph_text))
+            print("WillyTest: %s" %(qa["answers"]))
             raise ValueError(
                 "For training, each question should have exactly 1 answer. paragraph_text:%s" %paragraph_text)
           if not is_impossible:
