@@ -386,6 +386,14 @@ def read_squad_examples(input_file, is_training):
             raise ValueError(
                 "For training, each question should have exactly 1 answer. paragraph_text:%s" %paragraph_text)
           if not is_impossible:
+            
+            print("qa: %s \n" %(qa["answers"][0]))
+            print("answer: %s \n" %(answer["text"]))
+            print("answer_offset: %s \n" %(answer["answer_start"]))
+            print("answer_length: %s \n" %(len(orig_answer_text)))
+            print("start_position: %s \n" %(char_to_word_offset[answer_offset]))
+            print("end_position: %s \n" %(char_to_word_offset[answer_offset + answer_length - 1]))
+            
             answer = qa["answers"][0]
             orig_answer_text = answer["text"]
             answer_offset = answer["answer_start"]
