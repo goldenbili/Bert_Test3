@@ -390,9 +390,9 @@ def read_squad_examples(input_file, is_training):
             print("qa: %s \n" %(qa["answers"][0]))
             print("answer: %s \n" %(answer["text"]))
             print("answer_offset: %s \n" %(answer["answer_start"]))
-            print("answer_length: %s \n" %(len(orig_answer_text)))
-            print("start_position: %s \n" %(char_to_word_offset[answer_offset]))
-            print("end_position: %s \n" %(char_to_word_offset[answer_offset + answer_length - 1]))
+            print("answer_length: %d \n" %(len(orig_answer_text)))
+            print("start_position: %d \n" %(char_to_word_offset[answer_offset]))
+            print("end_position: %d \n" %(char_to_word_offset[answer_offset + answer_length - 1]))
             
             
             orig_answer_text = answer["text"]
