@@ -388,19 +388,23 @@ def read_squad_examples(input_file, is_training):
           if not is_impossible:
             answer = qa["answers"][0]
             print("qa: %s \n" %(qa["answers"][0]))
+            orig_answer_text = answer["text"]
             print("answer: %s \n" %(answer["text"]))
             print("answer_offset: %s \n" %(answer["answer_start"]))
+            answer_length = len(orig_answer_text)
+            answer_offset = answer["answer_start"]
             print("answer_length: %d \n" %(len(orig_answer_text)))
+            start_position = char_to_word_offset[answer_offset]
             print("start_position: %d \n" %(char_to_word_offset[answer_offset]))
+            end_position = char_to_word_offset[answer_offset + answer_length - 1]
             print("end_position: %d \n" %(char_to_word_offset[answer_offset + answer_length - 1]))
             
             
-            orig_answer_text = answer["text"]
-            answer_offset = answer["answer_start"]
-            answer_length = len(orig_answer_text)
-            start_position = char_to_word_offset[answer_offset]
-            end_position = char_to_word_offset[answer_offset + answer_length -
-                                               1]
+            
+            
+           
+            
+
             # Only add answers where the text can be exactly recovered from the
             # document. If this CAN'T happen it's likely due to weird Unicode
             # stuff so we will just skip the example.
