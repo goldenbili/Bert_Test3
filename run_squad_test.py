@@ -386,7 +386,7 @@ def read_squad_examples(input_file, is_training):
             raise ValueError(
                 "For training, each question should have exactly 1 answer. paragraph_text:%s" %paragraph_text)
           if not is_impossible:
-            
+            '''
             answer = qa["answers"][0]
             print("qa: %s \n" %(qa["answers"][0]))
             orig_answer_text = answer["text"]
@@ -406,7 +406,7 @@ def read_squad_examples(input_file, is_training):
             answer_offset = answer["answer_start"]
             start_position = char_to_word_offset[answer_offset]
             end_position = char_to_word_offset[answer_offset + answer_length - 1]
-            '''
+            
             
 
             # Only add answers where the text can be exactly recovered from the
